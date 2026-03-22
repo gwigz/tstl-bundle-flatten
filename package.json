@@ -1,0 +1,45 @@
+{
+  "name": "@gwigz/tstl-bundle-flatten",
+  "version": "1.0.0",
+  "description": "TSTL plugin that flattens luaBundle output, eliminating the module system",
+  "keywords": [
+    "bundle",
+    "flatten",
+    "lua",
+    "tstl",
+    "tstl-plugin",
+    "typescript-to-lua"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gwigz/tstl-bundle-flatten.git"
+  },
+  "files": [
+    "dist/index.cjs"
+  ],
+  "type": "commonjs",
+  "main": "dist/index.cjs",
+  "exports": {
+    ".": "./dist/index.cjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outfile dist/index.cjs --target node --format cjs",
+    "test": "bun test",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt --write .",
+    "fmt:check": "oxfmt --check .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "husky": "^9.1.7",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0"
+  },
+  "peerDependencies": {
+    "typescript-to-lua": ">=1.22.0"
+  }
+}

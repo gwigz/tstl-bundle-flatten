@@ -35,7 +35,7 @@ export function flattenBundle(code: string, skipModules: string[]): string {
     body = body.replace(/local ____exports = \{\}\n/, "");
 
     // Strip return (table constructor or bare ____exports)
-    body = body.replace(/\nreturn (?:____exports|\{[^}]*\})$/, "");
+    body = body.replace(/(?:^|\n)return (?:____exports|\{[^}]*\})$/, "");
 
     // Strip require() lines
     body = body.replace(/^local ____\w+ = require\("[^"]+"\)\n/gm, "");

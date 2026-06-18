@@ -37,15 +37,24 @@ export function flattenBundle(code: string, skipModules: string[]): string {
     // Strip return (table constructor or bare ____exports)
     body = body.replace(/(?:^|\n)return (?:____exports|\{[^}]*\})$/, "");
 
-    // Strip require() lines
-    body = body.replace(/^local ____\w+ = require\("[^"]+"\)\n/gm, "");
+    // Strip require() lines (allow leading indent — TSTL sometimes wraps
+    // requires in a `do ... end` scope which indents the statements)
+    body = body.replace(/^[ \t]*local ____\w+ = require\("[^"]+"\)\n/gm, "");
 
     // Resolve import destructuring:
     //   same name  -> remove (function already in scope from earlier module)
     //   different  -> alias (local newName = originalName)
-    body = body.replace(/^local (\w+) = ____\w+\.(\w+)\n/gm, (_m, localName: string, exportName: string) =>
-      localName === exportName ? "" : `local ${localName} = ${exportName}\n`,
+    body = body.replace(
+      /^([ \t]*)local (\w+) = ____\w+\.(\w+)\n/gm,
+      (_m, indent: string, localName: string, exportName: string) =>
+        localName === exportName ? "" : `${indent}local ${localName} = ${exportName}\n`,
     );
+
+    // Strip `do ... end` scopes whose body became empty after require +
+    // destructure elimination (TSTL wraps side-effect imports and some hoisted
+    // references in a `do` block; when all its statements disappear the block
+    // is left as dead whitespace).
+    body = body.replace(/^do(?:\n\s*)+end\n?/gm, "");
 
     bodies.push(body.trim());
   }

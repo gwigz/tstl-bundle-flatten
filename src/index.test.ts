@@ -232,6 +232,69 @@ local VERSION = "1.0.0"
 "
 `);
   });
+
+  test("strips do/end scopes that only wrapped a require + destructure", () => {
+    // TSTL wraps side-effect-only or hoisted imports in a `do ... end` scope.
+    // After flatten strips the require line and the same-name destructure,
+    // the block body is empty and the scope should collapse away.
+    const code = tstlBundle(
+      [
+        [
+          "src/shared",
+          `local ____exports = {}
+function ____exports.helper()
+    return 1
+end
+return ____exports`,
+        ],
+        [
+          "src/main",
+          `do
+    local ____shared = require("src/shared")
+    local helper = ____shared.helper
+end
+print("hi")`,
+        ],
+      ],
+      "src/main",
+    );
+
+    expect(flattenBundle(code, [])).toMatchInlineSnapshot(`
+"--[[ Generated with https://github.com/TypeScriptToLua/TypeScriptToLua ]]
+
+local function helper()
+    return 1
+end
+
+print("hi")
+"
+`);
+  });
+
+  test("leaves non-empty do/end scopes untouched", () => {
+    const code = tstlBundle(
+      [
+        [
+          "src/main",
+          `do
+    local x = 1
+    print(x)
+end`,
+        ],
+      ],
+      "src/main",
+    );
+
+    expect(flattenBundle(code, [])).toMatchInlineSnapshot(`
+"--[[ Generated with https://github.com/TypeScriptToLua/TypeScriptToLua ]]
+
+do
+    local x = 1
+    print(x)
+end
+"
+`);
+  });
 });
 
 describe("full pipeline (flatten + format)", () => {

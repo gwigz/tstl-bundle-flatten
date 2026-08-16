@@ -14,8 +14,18 @@ export function formatLua(code: string): string {
   // After top-level `)` or `}` followed by code
   code = code.replace(/^([)}])\n(?!\n|[)}])/gm, "$1\n\n");
 
-  // After `local` block when followed by non-local code
-  code = code.replace(/^(\s*local (?!function\b)\w[^\n]*)\n([^\S\n]*(?!local\b|--)\S)/gm, "$1\n\n$2");
+  // After `local` block when followed by non-local code, unless the local
+  // opens a multiline function expression (e.g. `local x = wrap(function()`)
+  code = code.replace(
+    /^(\s*local (?!function\b)\w[^\n]*)\n([^\S\n]*(?!local\b|--)\S)/gm,
+    (match, prev: string, next: string) => {
+      if (RE_FUNCTION_HEAD.test(prev.trimEnd())) {
+        return match;
+      }
+
+      return prev + "\n\n" + next;
+    },
+  );
 
   // Before `local` declarations when preceded by non-local, non-comment code
   code = code.replace(/^([^\n]+)\n([^\S\n]*local (?!function\b)\w)/gm, (match, prev: string, localLine: string) => {

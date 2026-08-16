@@ -1,11 +1,13 @@
 {
   "name": "@gwigz/tstl-bundle-flatten",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "TSTL plugin that flattens luaBundle output, eliminating the module system",
   "keywords": [
     "bundle",
+    "dead-code-elimination",
     "flatten",
     "lua",
+    "tree-shaking",
     "tstl",
     "tstl-plugin",
     "typescript-to-lua"
@@ -25,7 +27,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outfile dist/index.cjs --target node --format cjs",
+    "build": "bun build src/index.ts --outfile dist/index.cjs --target node --format cjs --external darklua-wasm",
     "test": "bun test",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -35,11 +37,18 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
+    "darklua-wasm": "^0.1.0",
     "husky": "^9.1.7",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0"
   },
   "peerDependencies": {
+    "darklua-wasm": ">=0.1.0",
     "typescript-to-lua": ">=1.22.0"
+  },
+  "peerDependenciesMeta": {
+    "darklua-wasm": {
+      "optional": true
+    }
   }
 }

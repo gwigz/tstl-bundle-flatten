@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { flattenBundle } from "./flatten";
 import { formatLua } from "./format";
+import { shakeBundle } from "./shake";
 
 /**
  * Builds a realistic TSTL luaBundle string matching the actual
@@ -466,5 +467,135 @@ end
 
 "
 `);
+  });
+});
+
+describe("shakeBundle", () => {
+  test("removes unused local functions, keeping the live chain", () => {
+    const code = `local function used()
+    return 1
+end
+local function unused()
+    return 2
+end
+local function alsoUnused()
+    return unused()
+end
+print(used())
+`;
+
+    expect(shakeBundle(code)).toMatchInlineSnapshot(`
+      "local function used()
+          return 1
+      end
+      print(used())
+      "
+    `);
+  });
+
+  test("preserves side effects when removing an unused local", () => {
+    const code = `local handle = ll.Listen(0, "", "", "")
+print("listening")
+`;
+
+    expect(shakeBundle(code)).toMatchInlineSnapshot(`
+      "ll.Listen(0, "", "", "")
+      print("listening")
+      "
+    `);
+  });
+
+  test("keeps aliased functions used through the alias", () => {
+    const code = `local function yieldFetch(url)
+    return url
+end
+local fetch = yieldFetch
+print(fetch("https://example.com"))
+`;
+
+    expect(shakeBundle(code)).toMatchInlineSnapshot(`
+      "local function yieldFetch(url)
+          return url
+      end
+      local fetch = yieldFetch
+      print(fetch("https://example.com"))
+      "
+    `);
+  });
+});
+
+describe("full pipeline (flatten + shake + format)", () => {
+  function transformShaken(code: string, skipModules: string[] = []) {
+    return formatLua(shakeBundle(flattenBundle(code, skipModules)));
+  }
+
+  test("drops vendored exports the entry never uses", () => {
+    // Mirrors the vendored-modules case: utilities exports three helpers
+    // through a barrel, the entry imports only one. The unused function
+    // bodies must not survive.
+    const code = tstlBundle(
+      [
+        [
+          "src/modules/utilities",
+          `local ____exports = {}
+function ____exports.cooldown(fn, seconds)
+    local ready = true
+    return function(...)
+        if ready then
+            ready = false
+            fn(...)
+        end
+    end
+end
+function ____exports.debounce(fn, seconds)
+    return function(...)
+        fn(...)
+    end
+end
+function ____exports.throttle(fn, seconds)
+    return function(...)
+        fn(...)
+    end
+end
+return ____exports`,
+        ],
+        [
+          "src/main",
+          `local ____utilities = require("src/modules/utilities")
+local cooldown = ____utilities.cooldown
+local greet = cooldown(function(id)
+    ll.Say(0, "hello " .. id)
+end, 5)
+LLEvents:on("touch_start", greet)`,
+        ],
+      ],
+      "src/main",
+    );
+
+    const output = transformShaken(code);
+
+    expect(output).toContain("cooldown");
+    expect(output).not.toContain("debounce");
+    expect(output).not.toContain("throttle");
+    expect(output).toMatchInlineSnapshot(`
+      "--[[ Generated with https://github.com/TypeScriptToLua/TypeScriptToLua ]]
+
+      local function cooldown(fn, seconds)
+          local ready = true
+
+          return function(...)
+              if ready then
+                  ready = false
+                  fn(...)
+              end
+          end
+      end
+
+      local greet = cooldown(function(id)
+          ll.Say(0, "hello " .. id)
+      end, 5)
+      LLEvents:on("touch_start", greet)
+      "
+    `);
   });
 });

@@ -43,6 +43,8 @@ Options are passed inline in the plugin entry:
   "skipModules": ["constants"],
   // Insert blank lines at code boundaries for readability (default: true)
   "format": true,
+  // Remove unused code after flattening, requires darklua-wasm (default: false)
+  "shake": false,
 }
 ```
 
@@ -50,6 +52,34 @@ Options are passed inline in the plugin entry:
 | ------------- | ---------- | ------- | -------------------------------------------------------- |
 | `skipModules` | `string[]` | `[]`    | Module names to leave untouched by the flattener         |
 | `format`      | `boolean`  | `true`  | Add whitespace between logical code blocks in the output |
+| `shake`       | `boolean`  | `false` | Remove unused top-level code after flattening            |
+
+## Tree shaking
+
+Flattening turns every module export into a top-level `local`, which makes dead code
+elimination simple: anything nothing references can be removed. With `"shake": true`,
+the plugin runs [darklua](https://darklua.com)'s `remove_unused_variable` and
+`remove_empty_do` rules over the flattened output.
+
+This requires the optional [`darklua-wasm`](https://www.npmjs.com/package/darklua-wasm)
+peer dependency:
+
+```sh
+bun add -D darklua-wasm
+# or
+npm install -D darklua-wasm
+```
+
+What it does:
+
+- Removes unused `local function` definitions and unused locals, including
+  functions only referenced by other removed functions
+- Keeps side effects: an unused `local x = call()` becomes a bare `call()`
+- Shakes inlined lualib functions too, since they flatten into locals like
+  everything else
+
+Unlike TypeScript-level tree shaking, this happens after bundling, so it also
+catches unused exports pulled in through re-export chains (barrel files).
 
 ## Example
 

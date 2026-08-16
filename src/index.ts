@@ -1,10 +1,12 @@
 import { flattenBundle } from "./flatten";
 import { formatLua } from "./format";
+import { shakeBundle } from "./shake";
 
 interface PluginConfig {
   name: string;
   skipModules?: string[];
   format?: boolean;
+  shake?: boolean;
 }
 
 interface EmitFile {
@@ -24,9 +26,14 @@ const plugin = {
 
     const skipModules = config?.skipModules ?? [];
     const format = config?.format ?? true;
+    const shake = config?.shake ?? false;
 
     for (const file of result) {
       file.code = flattenBundle(file.code, skipModules);
+
+      if (shake) {
+        file.code = shakeBundle(file.code);
+      }
 
       if (format) {
         file.code = formatLua(file.code);

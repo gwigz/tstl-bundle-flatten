@@ -234,6 +234,48 @@ local VERSION = "1.0.0"
 `);
   });
 
+  test("strips imports the return left as the body's last line", () => {
+    // `return ____exports` goes before the imports do, so a re-export module
+    // can end up with a require or destructure as its final line. The regexes
+    // this replaced were anchored on a trailing newline and left those behind,
+    // still referring to a `____mod` that had just been deleted.
+    const code = tstlBundle(
+      [
+        [
+          "src/utils",
+          `local ____exports = {}
+function ____exports.create()
+    return {}
+end
+return ____exports`,
+        ],
+        [
+          "src/index",
+          `local ____exports = {}
+local ____utils = require("src/utils")
+local create = ____utils.create
+local makeNew = ____utils.create
+return ____exports`,
+        ],
+        ["src/main", `local ____index = require("src/index")\nmakeNew()`],
+      ],
+      "src/main",
+    );
+
+    expect(flattenBundle(code, [])).toMatchInlineSnapshot(`
+      "--[[ Generated with https://github.com/TypeScriptToLua/TypeScriptToLua ]]
+
+      local function create()
+          return {}
+      end
+
+      local makeNew = create
+
+      makeNew()
+      "
+    `);
+  });
+
   test("strips do/end scopes that only wrapped a require + destructure", () => {
     // TSTL wraps side-effect-only or hoisted imports in a `do ... end` scope.
     // After flatten strips the require line and the same-name destructure,

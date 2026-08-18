@@ -1,3 +1,5 @@
+import { type Line, inserted, isBlank, render, splitLines } from "./lines";
+
 /**
  * Tree-shakes flattened output by removing unused top-level locals.
  *
@@ -17,6 +19,8 @@ const DARKLUA_CONFIG = {
   generator: "retain_lines",
 };
 
+const HEADER_COMMENT = /^--\[\[[^\n]*\]\]$/;
+
 let darklua: DarkluaWasm | undefined;
 
 function loadDarklua(): DarkluaWasm {
@@ -34,15 +38,40 @@ function loadDarklua(): DarkluaWasm {
   return darklua;
 }
 
-export function shakeBundle(code: string): string {
-  const shaken = loadDarklua().process_code(code, DARKLUA_CONFIG);
+export function shakeLines(lines: Line[]): Line[] {
+  const shaken = loadDarklua().process_code(render(lines), DARKLUA_CONFIG);
+  const shakenLines = shaken.split("\n");
+
+  // `retain_lines` keeps the line count identical, blanking out what it
+  // removed, so output line N still corresponds to input line N. If a
+  // darklua release ever stops holding to that, give up on the mapping
+  // entirely rather than point every later line at the wrong TypeScript.
+  const aligned = shakenLines.length === lines.length;
+
+  const tracked: Line[] = shakenLines.map((text, index) => ({
+    text,
+    src: aligned ? lines[index].src : -1,
+  }));
+
+  // A trailing empty element is the file's final newline, not a line.
+  const trailingNewline = tracked.length > 0 && tracked[tracked.length - 1].text === "";
+  const body = trailingNewline ? tracked.slice(0, -1) : tracked;
 
   // The retain_lines generator leaves blank lines where code was removed
-  // (sometimes mid-statement); strip them all and let formatLua rebuild
-  // the spacing at natural code boundaries
-  return shaken
-    .replace(/^[ \t]+$/gm, "")
-    .replace(/\n{2,}/g, "\n")
-    .replace(/^\n+/, "")
-    .replace(/^(--\[\[[^\n]*\]\])\n/, "$1\n\n");
+  // (sometimes mid-statement); strip them all and let formatting rebuild the
+  // spacing at natural code boundaries.
+  const compact = body.filter((line) => !isBlank(line.text));
+
+  if (trailingNewline) compact.push(inserted(""));
+
+  // Keep the generated-by header visually separated.
+  if (compact.length > 1 && HEADER_COMMENT.test(compact[0].text)) {
+    compact.splice(1, 0, inserted(""));
+  }
+
+  return compact;
+}
+
+export function shakeBundle(code: string): string {
+  return render(shakeLines(splitLines(code)));
 }

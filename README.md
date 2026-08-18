@@ -81,6 +81,23 @@ What it does:
 Unlike TypeScript-level tree shaking, this happens after bundling, so it also
 catches unused exports pulled in through re-export chains (barrel files).
 
+## Source maps
+
+With `"sourceMap": true` in your `compilerOptions`, the plugin rewrites the emitted
+`.map` alongside the code, so generated lines still resolve back to the original
+TypeScript after flattening, shaking and formatting.
+
+Mapping is line accurate, not column accurate: the transforms rewrite line contents,
+so only the line a statement ended up on is meaningful. That is enough to turn a
+runtime or compiler error in the flattened output back into a file and line you
+recognise.
+
+TSTL writes the map before plugins run, so without this the `.map` on disk would
+describe the unflattened bundle and point at the wrong lines.
+
+`inlineSourceMap` is not supported: TSTL appends its comment after the bundle's
+entry call, which flattening drops along with the rest of the module runtime.
+
 ## Example
 
 Given a bundle with two modules:

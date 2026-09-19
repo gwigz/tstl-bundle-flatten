@@ -75,6 +75,69 @@ local TIMEOUT = 30
 `);
   });
 
+  test("hoists a renaming re-export out of the scope its require was in", () => {
+    const code = tstlBundle(
+      [
+        [
+          "src/first",
+          `local ____exports = {}
+function ____exports.value()
+    return "a"
+end
+return ____exports`,
+        ],
+        [
+          "src/mid",
+          `local ____exports = {}
+do
+    local ____first = require("src/first")
+    ____exports.alias = ____first.value
+end
+return ____exports`,
+        ],
+        [
+          "src/entry",
+          `local ____exports = {}
+local ____mid = require("src/mid")
+local alias = ____mid.alias
+print(alias())
+return ____exports`,
+        ],
+      ],
+      "src/entry",
+    );
+
+    const flattened = flattenBundle(code, []);
+
+    expect(flattened).toContain("\nlocal alias = value\n");
+    expect(flattened).not.toContain("do");
+  });
+
+  test("refuses a namespace import, which has no object left to name", () => {
+    const code = tstlBundle(
+      [
+        [
+          "src/first",
+          `local ____exports = {}
+function ____exports.value()
+    return "a"
+end
+return ____exports`,
+        ],
+        [
+          "src/entry",
+          `local ____exports = {}
+local all = require("src/first")
+print(all.value())
+return ____exports`,
+        ],
+      ],
+      "src/entry",
+    );
+
+    expect(() => flattenBundle(code, [])).toThrow('cannot flatten a namespace import of "src/first"');
+  });
+
   test("flattens multi-module bundle preserving dependency order", () => {
     const code = tstlBundle(
       [

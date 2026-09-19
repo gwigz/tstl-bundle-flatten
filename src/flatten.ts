@@ -16,8 +16,10 @@ import { type Line, inserted, isBlank, render, splitLines } from "./lines";
 const MODULE = /\["([^"]+)"\] = function\([^)]*\)\s*\n([\s\S]*?)\n end,/dg;
 
 const EXPORTS_TABLE = "local ____exports = {}";
-const REQUIRE_LINE = /^[ \t]*local ____\w+ = require\("[^"]+"\)$/;
+const REQUIRE_LINE = /^[ \t]*(?:local ____\w+ = )?require\("[^"]+"\)$/;
 const IMPORT_LINE = /^([ \t]*)local (\w+) = ____\w+\.(\w+)$/;
+const NAMESPACE_REQUIRE = /^[ \t]*local \w+ = require\("([^"]+)"\)$/;
+const INDENT = /^ {4}/;
 const RETURN_EXPORTS = /(?:^|\n)return (?:____exports|\{[^}]*\})$/;
 
 /** Rewrites the ____exports table away, one line at a time. */
@@ -62,7 +64,25 @@ function stripReturn(lines: Line[]): Line[] {
 function stripImports(lines: Line[]): Line[] {
   const result: Line[] = [];
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+
+    // A renaming re-export is scoped in a bare `do` block so its require is local to it. The
+    // block now holds a top-level local instead, which nothing outside could see.
+    if (line.text === "do") {
+      const close = lines.findIndex((other, at) => at > index && other.text === "end");
+
+      if (close !== -1 && lines.slice(index + 1, close).some((other) => REQUIRE_LINE.test(other.text))) {
+        for (const unwrapped of stripImports(lines.slice(index + 1, close))) {
+          result.push({ ...unwrapped, text: unwrapped.text.replace(INDENT, "") });
+        }
+
+        index = close;
+
+        continue;
+      }
+    }
+
     if (REQUIRE_LINE.test(line.text)) continue;
 
     const match = IMPORT_LINE.exec(line.text);
@@ -176,6 +196,21 @@ export function flattenLines(lines: Line[], skipModules: string[]): Line[] {
     if (index > 0) result.push(inserted(""));
 
     result.push(...body);
+  }
+
+  // A namespace import binds a module under a name of its own choosing rather than the `____`
+  // prefix TSTL gives an import it destructures, and it is the one import that asks for the module
+  // as an object. Flattening spends that object to make top-level locals, so the require would
+  // survive into output with no runtime left to answer it and fail on load instead of here.
+  for (const line of result) {
+    const namespace = NAMESPACE_REQUIRE.exec(line.text);
+
+    if (namespace !== null) {
+      throw new Error(
+        `tstl-bundle-flatten: cannot flatten a namespace import of "${namespace[1]}". ` +
+          "Import the names themselves.",
+      );
+    }
   }
 
   return result;

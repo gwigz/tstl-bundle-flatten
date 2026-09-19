@@ -1,3 +1,4 @@
+import { flattenConcatChains } from "./concat";
 import { type Line, inserted, isBlank, render, splitLines } from "./lines";
 
 /**
@@ -39,18 +40,21 @@ function loadDarklua(): DarkluaWasm {
 }
 
 export function shakeLines(lines: Line[]): Line[] {
-  const shaken = loadDarklua().process_code(render(lines), DARKLUA_CONFIG);
+  // darklua's parser is exponential in parenthesis nesting, and TSTL nests one level per value in
+  // a template literal, so a long enough interpolated string never finishes parsing.
+  const input = flattenConcatChains(lines);
+  const shaken = loadDarklua().process_code(render(input), DARKLUA_CONFIG);
   const shakenLines = shaken.split("\n");
 
   // `retain_lines` keeps the line count identical, blanking out what it
   // removed, so output line N still corresponds to input line N. If a
   // darklua release ever stops holding to that, give up on the mapping
   // entirely rather than point every later line at the wrong TypeScript.
-  const aligned = shakenLines.length === lines.length;
+  const aligned = shakenLines.length === input.length;
 
   const tracked: Line[] = shakenLines.map((text, index) => ({
     text,
-    src: aligned ? lines[index].src : -1,
+    src: aligned ? input[index].src : -1,
   }));
 
   // A trailing empty element is the file's final newline, not a line.

@@ -627,6 +627,25 @@ print(fetch("https://example.com"))
       "
     `);
   });
+
+  test("keeps the parentheses around an if-expression operand", () => {
+    // An if-expression's `else` branch runs as far right as it can, so it binds looser than
+    // every binary operator. These parentheses must survive darklua's parse and print.
+    const code = `local ok = n > 0
+print((if ok then "A" else "B") .. " tail")
+print(s .. (if ok then "A" else "B") .. " tail")
+print((if ok then 1 else 2) + n, n - (if ok then 1 else 2) * 3)
+print((if ok then 1 else 2) ^ n, -(if ok then 1 else 2))
+print((if ok then 1 else 2) < n, (if ok then 1 else 2) == n)
+print((if ok then s else nil) or "B", (if ok then n else nil) and n > 1)
+print(not (if ok then n else nil))
+print((if ok then (if n > 1 then "big" else "one") else "none") .. "!")
+print((if ok then 1 else if n > 1 then 2 else 3) + n)
+print((if ok then f else g)("z"), (if ok then t else u).field)
+`;
+
+    expect(shakeBundle(code)).toBe(code);
+  });
 });
 
 describe("full pipeline (flatten + shake + format)", () => {
@@ -702,5 +721,38 @@ LLEvents:on("touch_start", greet)`,
       LLEvents:on("touch_start", greet)
       "
     `);
+  });
+
+  test("keeps the parentheses that end an if-expression in a template literal", () => {
+    // TypeScriptToLua 1.37.1's Luau output for:
+    //   print(`Result: ${ok ? "PASS" : "FAIL"}; n=${n}`);
+    //   print(`x${ok ? `${n}!` : "none"}y`);
+    //   print(`a${ok ? "x" : n > 1 ? "y" : "z"}b${n}`);
+    // The group a template literal nests into is what ends each if-expression.
+    const code = tstlBundle(
+      [
+        [
+          "src/main",
+          `local ____exports = {}
+local n = ll.GetUnixTime() % 3
+local ok = n > 0
+print((("Result: " .. if ok then "PASS" else "FAIL") .. "; n=") .. tostring(n))
+print(("x" .. if ok then tostring(n) .. "!" else "none") .. "y")
+print((("a" .. if ok then "x" else if n > 1 then "y" else "z") .. "b") .. tostring(n))
+return ____exports`,
+        ],
+      ],
+      "src/main",
+    );
+
+    const prints = transformShaken(code)
+      .split("\n")
+      .filter((line) => line.startsWith("print"));
+
+    expect(prints).toEqual([
+      `print(("Result: " .. if ok then "PASS" else "FAIL") .. "; n=" .. tostring(n))`,
+      `print(("x" .. if ok then tostring(n) .. "!" else "none") .. "y")`,
+      `print(("a" .. if ok then "x" else if n > 1 then "y" else "z") .. "b" .. tostring(n))`,
+    ]);
   });
 });

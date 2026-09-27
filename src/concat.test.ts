@@ -23,6 +23,57 @@ describe("flattenConcatChains", () => {
     expect(rewrite("local y = (a .. b and c) .. d")).toBe("local y = (a .. b and c) .. d");
   });
 
+  test("keeps a group that ends an if-expression", () => {
+    // `Result: ${ok ? "PASS" : "FAIL"}; n=${n}`, as TSTL lowers it for Luau. Without the
+    // inner group, the `else` branch would take the rest of the concatenation.
+    expect(rewrite(`print((("Result: " .. if ok then "PASS" else "FAIL") .. "; n=") .. tostring(n))`)).toBe(
+      `print(("Result: " .. if ok then "PASS" else "FAIL") .. "; n=" .. tostring(n))`,
+    );
+
+    // Concatenation on both sides of the group.
+    expect(rewrite(`local r = x .. ("a" .. if ok then b else c) .. y`)).toBe(
+      `local r = x .. ("a" .. if ok then b else c) .. y`,
+    );
+
+    // A branch that concatenates.
+    expect(rewrite(`print(("x" .. if ok then s .. "!" else "none") .. "y")`)).toBe(
+      `print(("x" .. if ok then s .. "!" else "none") .. "y")`,
+    );
+  });
+
+  test("keeps a group that ends an if-expression holding other operators", () => {
+    expect(rewrite(`local r = ("a" .. if ok then n + 1 else n * 2) .. "b"`)).toBe(
+      `local r = ("a" .. if ok then n + 1 else n * 2) .. "b"`,
+    );
+    expect(rewrite(`local r = ("a" .. if n < 1 then "lt" else n == 1) .. "b"`)).toBe(
+      `local r = ("a" .. if n < 1 then "lt" else n == 1) .. "b"`,
+    );
+    expect(rewrite(`local r = ("a" .. if ok then s else t or u) .. "b"`)).toBe(
+      `local r = ("a" .. if ok then s else t or u) .. "b"`,
+    );
+  });
+
+  test("keeps a group that ends a nested if-expression", () => {
+    expect(rewrite(`print((("a" .. if ok then "x" else if big then "y" else "z") .. "b") .. s)`)).toBe(
+      `print(("a" .. if ok then "x" else if big then "y" else "z") .. "b" .. s)`,
+    );
+    expect(rewrite(`print(("a" .. if ok then if big then "y" else "z" else "x") .. "b")`)).toBe(
+      `print(("a" .. if ok then if big then "y" else "z" else "x") .. "b")`,
+    );
+  });
+
+  test("still flattens around an if-expression that has its own parentheses", () => {
+    expect(rewrite(`print(((if ok then "A" else "B") .. " tail") .. s)`)).toBe(
+      `print((if ok then "A" else "B") .. " tail" .. s)`,
+    );
+    expect(rewrite(`print((s .. (if ok then "A" else "B")) .. " tail")`)).toBe(
+      `print(s .. (if ok then "A" else "B") .. " tail")`,
+    );
+    expect(rewrite(`print((s .. f(if ok then "A" else "B")) .. " tail")`)).toBe(
+      `print(s .. f(if ok then "A" else "B") .. " tail")`,
+    );
+  });
+
   test("leaves a group that is not an operand of a concatenation", () => {
     expect(rewrite("local x = (a .. b) == c")).toBe("local x = (a .. b) == c");
     expect(rewrite("local x = (a + b) .. c")).toBe("local x = (a + b) .. c");

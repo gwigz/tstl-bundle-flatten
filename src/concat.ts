@@ -75,8 +75,16 @@ function codeMask(text: string): boolean[] {
 
 const IDENTIFIER_END = /[\w\]")]/;
 
-/** Operators that bind looser than `..`, so a group holding one is not redundant. */
-const LOOSER = /(?:^|[^\w])(?:or|and|not)(?:[^\w]|$)|[<>~=]=|[<>]/;
+/**
+ * Operators that bind looser than `..`, so a group holding one is not redundant.
+ *
+ * That includes a Luau if-expression. Its `else` branch runs as far right as it
+ * can, so it binds looser than every binary operator. TSTL lowers
+ * `\`a${ok ? x : y}b\`` to `("a" .. if ok then x else y) .. "b"`, where the
+ * closing parenthesis is all that ends the `else` branch. Without it, `.. "b"`
+ * joins that branch and is only printed when `ok` is false.
+ */
+const LOOSER = /(?:^|[^\w])(?:or|and|not|if)(?:[^\w]|$)|[<>~=]=|[<>]/;
 
 function rewrite(text: string): string {
   const mask = codeMask(text);
